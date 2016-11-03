@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+####################################################################################
+### THIS MODULE IS MODIFIED FOR MHCII PREDICTION SUBMISSION AND DATA INTEGRATION ###
+####################################################################################
 import subprocess,re,os,sys,getopt
 
 import package
@@ -11,14 +14,12 @@ __location__ = os.path.realpath(
 
 global methods
 methods =[
-#          "smm",
-#          "smmpmbec",
-#          "ann",
-          "consensus"
-#          "pickpocket",
-#          "netmhcpan",
-#          "netmhccons",
-#          "comblib_sidney2008"
+          #"consensus",
+          #"NetMHCIIpan",
+          #"nn_align",
+          #"smm_align",
+          "comblib",
+          "tepitope"
           ]
          
 global dirname 

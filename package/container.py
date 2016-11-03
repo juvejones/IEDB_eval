@@ -5,6 +5,7 @@
 class PepData(object):
     def __init__(self,size):
         self.name = [None]*size
+        self.core = [None]*size
         self.meas_nm = [None]*size
         self.meas_bi = [None]*size
         self.meas_contin = [None]*size

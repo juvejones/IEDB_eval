@@ -28,18 +28,23 @@ def runPredict(methods, allele_list, Dir):
 		for key, value in allele_list.iteritems():
 		    print(key)
 		    allele_rename = re.sub('[*:]','',key)
+		    allele_rename = re.sub('/','-',allele_rename)
 		    summaryf.write("###%s\n" % allele_rename)
 		    ## input sequence is in two-column format, converted by fileroutine.InputSeq
 		    ## and stored in tmp_dir
 		    input_path = Dir.tmp_dir 
 		    output = output_path+'/HLA-{0}.txt'.format(allele_rename)
 			
-		    with open(input_path+'/HLA-{0}.txt'.format(key),'r') as file:
+		    with open(input_path+'/HLA-{0}.txt'.format(allele_rename),'r') as file:
 		        lines = file.readlines()
 		        num_lines = sum(1 for line in lines)
-		        splitlen = 50
+		        if method == "smm_align":
+		        	splitlen = 1
+		        else:
+		        	splitlen = 20
 
-		        if num_lines > 100:
+		        ## Network restraint, split sequences into small packages to prevent timeout
+		        if num_lines > splitlen:
 		            outf = open(output,'w')
 		            batch_lines = []
 		            j = 0
@@ -58,12 +63,12 @@ def runPredict(methods, allele_list, Dir):
 		                		sequences = sequences + "%0A%3E"	
 
 		                allele = "HLA-" + key
-		                data = "method="+str(method)+"&sequence_text="+str(sequences)+"&allele="+str(allele)+"&length=9"
+		                data = "method="+str(method)+"&sequence_text="+str(sequences)+"&allele="+str(allele)
 		                subprocess.call([
 		                	'curl',
 		                	'-d',
 		                	data,
-		                	'http://tools-api.iedb.org/tools_api/mhci/',
+		                	'http://tools-api.iedb.org/tools_api/mhcii/',
 		                	'-o',
 		                	'temp_output'
 		                	])
@@ -78,6 +83,7 @@ def runPredict(methods, allele_list, Dir):
 		                j += 1
 
 		            outf.close()
+		        ## If sequence number is small then no need to split into packages
 		        else:
 		            i = 0
 		            sequences = "%3E"
@@ -90,12 +96,12 @@ def runPredict(methods, allele_list, Dir):
 		                	sequences = sequences + "%0A%3E"	
 
 		            allele = "HLA-" + key
-		            data = "method="+str(method)+"&sequence_text="+str(sequences)+"&allele="+str(allele)+"&length=9"
+		            data = "method="+str(method)+"&sequence_text="+str(sequences)+"&allele="+str(allele)
 		            subprocess.call([
 		            	'curl',
 		            	'-d',
 		            	data,
-		            	'http://tools-api.iedb.org/tools_api/mhci/',
+		            	'http://tools-api.iedb.org/tools_api/mhcii/',
 		            	'-o',
 		            	output
 		            	])
@@ -121,27 +127,41 @@ def runPredict(methods, allele_list, Dir):
 		    		    outf.seek(0)
 		    		    cols_pred, indexToName_pred = fileroutine.getColumns(outf, header=True)
 
+		    	## Now start to put measured and predicted data into tables
 		    	peptides = cols[indexToName[0]]
-		    	if allele_rename == "B2705-Flower":
-		    		meas_cols = processing.convertPBL50(cols[indexToName[1]])
-		    	else:
-		    		meas_cols = cols[indexToName[1]]
+		    	##if allele_rename == "B2705-Flower":
+		    	##	meas_cols = processing.convertPBL50(cols[indexToName[1]])
+		    	##else:
+		    	meas_cols = cols[indexToName[1]]
+
 		    	if method == "consensus":
-		    		pred_cols = processing.twoColsMean(cols_pred[indexToName_pred[7]], 
-		    			cols_pred[indexToName_pred[9]])
-		    		pred_rank = cols_pred[indexToName_pred[6]]
+		    		### If consensus, use core predicted by comblib.
+		    		### In case certain alleles comblib has no output, 
+		    		### use core predicted by nn_align
+		    		if not cols_pred[indexToName_pred[6]][0] == "-":
+		    			peptide_core = cols_pred[indexToName_pred[6]]
+		    		else:
+		    			peptide_core = cols_pred[indexToName_pred[12]]
+
+		    		pred_cols = processing.twoColsMean(cols_pred[indexToName_pred[10]], 
+		    			cols_pred[indexToName_pred[13]])
+		    		pred_rank = cols_pred[indexToName_pred[5]]
 		    	else:
+		    		peptide_core = cols_pred[indexToName_pred[4]]
 		    		pred_cols = cols_pred[indexToName_pred[6]]
 		    		pred_rank = cols_pred[indexToName_pred[7]]
 		    	
 		    	indxcols = cols_pred[indexToName_pred[1]]
-		    	pred_cols = processing.reorder(indxcols, pred_cols)
-		    	pred_rank = processing.reorder(indxcols, pred_rank)
+		    	peptide_core = processing.reorder(indxcols, peptide_core, splitlen)
+		    	pred_cols = processing.reorder(indxcols, pred_cols, splitlen)
+		    	pred_rank = processing.reorder(indxcols, pred_rank, splitlen)
 
+		    ## Write PepData object to summary.txt and *allele*.txt
 		    with PepData(len(peptides)) as peptidedata:
 		    	for index,val in enumerate(peptides):
 		    		peptidedata.name[index] = val
-		    		processing.getData(index, peptidedata, 
+		    		peptidedata.core[index] = peptide_core[index]
+		    		processing.getData(method, index, peptidedata, 
 		    			meas_cols, pred_cols, pred_rank)
 		    
 		    	with open(dataout_path+'/HLA-{0}.txt'.format(allele_rename),'w') as dataoutfile:

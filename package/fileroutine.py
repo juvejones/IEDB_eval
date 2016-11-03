@@ -33,8 +33,11 @@ def getColumns(inFile, header=True, delimiter="\t"):
                 i = 0
                 for cell in cells:
                     cell = cell.strip()
-                    cols[indexToName[i]] += [cell]
-                    i += 1
+                    ### Tricky here: the output of consensus contains up to 18 cols, 
+                    ### while last 3 cols are disgarded (Sturniolo method)
+                    if i < 15:
+                        cols[indexToName[i]] += [cell]
+                        i += 1
 
     return cols, indexToName
 
@@ -78,10 +81,12 @@ def InputSeq(AlleleName, Dir):
 		data = []
 		data.append([])
 		data.append([])
+		allele_rename = re.sub('[*:]','',key)
+		allele_rename = re.sub('/','-',allele_rename)
 
-		if os.path.getsize(os.path.join(Dir.input_dir,"HLA-%s.txt") % key):
+		if os.path.getsize(os.path.join(Dir.input_dir,"HLA-%s.txt") % allele_rename):
 			AlleleName[key] = 1
-			with open(os.path.join(Dir.input_dir,"HLA-%s.txt") % key,'r') as f:
+			with open(os.path.join(Dir.input_dir,"HLA-%s.txt") % allele_rename,'r') as f:
 				for line in f:
 					cols = line.split()
 					data[0].append(cols[1].strip())
@@ -91,17 +96,20 @@ def InputSeq(AlleleName, Dir):
 			AlleleName[key] = 0
     		
 		if AlleleName[key]:
-			with open(os.path.join(Dir.tmp_dir,"HLA-%s.txt") % key,'w') as outFile:
+			with open(os.path.join(Dir.tmp_dir,"HLA-%s.txt") % allele_rename,'w') as outFile:
 				print("Writing File:%s" % (key))
 				for i in range(len(data[0])):
 					pep_flag, index_prev = processing.checkRepeat(data[0][i],data[0][:i])
 					if not pep_flag:
-						outFile.write("%s\t%.3f\n" % (data[0][i], float(data[1][i])))
+						### Only write seq that IC50 < 50k
+						if float(data[1][i]) < 50000.0: 
+							outFile.write("%s\t%.3f\n" % (data[0][i], float(data[1][i])))
 					else:
 						pep_flag = False
 
 def writeRdata(PepData, dataout):
 	dataout.write("peptide" + "\t"
+		+ "binding_core" + "\t"
 		+ "meas_nm" + "\t" 
 		+ "meas_bi" + "\t" 
 		+ "meas_contin" + "\t" 
@@ -109,7 +117,8 @@ def writeRdata(PepData, dataout):
 		+ "predict_rank" + "\n")
         				
 	for i in range(len(PepData.name)):
-		dataout.write("%s\t%.3f\t%d\t%.3f\t%.3f\t%.3f\n" % (PepData.name[i], PepData.meas_nm[i],
+		dataout.write("%s\t%s\t%.3f\t%d\t%.3f\t%.3f\t%.3f\n" % (PepData.name[i], 
+			PepData.core[i], PepData.meas_nm[i],
     		PepData.meas_bi[i], PepData.meas_contin[i], 
     		PepData.predict[i], PepData.predict_rank[i]))
 
